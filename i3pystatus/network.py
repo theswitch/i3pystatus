@@ -247,6 +247,7 @@ class Network(IntervalModule, ColorRangeModule):
     """
     settings = (
         ("format_up", "format string"),
+        ("format_up_verbose", "format string"),
         ("format_down", "format string"),
         "color_up",
         "color_down",
@@ -271,7 +272,9 @@ class Network(IntervalModule, ColorRangeModule):
     interval = 1
     interface = 'eth0'
 
-    format_up = "{interface} {network_graph}{kbs}KB/s"
+    format_up = "{interface}"
+    format_up_verbose = "{interface} {network_graph}{kbs}KB/s"
+    format_up_run = format_up
     format_down = "{interface}: DOWN"
     color_up = "#00FF00"
     color_down = "#FF0000"
@@ -280,6 +283,7 @@ class Network(IntervalModule, ColorRangeModule):
     graph_width = 15
     graph_style = 'blocks'
     upper_limit = 150.0
+    verbose = False
 
     # Network traffic settings
     divisor = 1024
@@ -290,14 +294,14 @@ class Network(IntervalModule, ColorRangeModule):
     unknown_up = False
     ignore_interfaces = ["lo"]
 
-    on_leftclick = "nm-connection-editor"
+    on_leftclick = "toggle_verbose"
     on_rightclick = "cycle_interface"
     on_upscroll = ['cycle_interface', 1]
     on_downscroll = ['cycle_interface', -1]
 
     def init(self):
         # Don't require importing basiciw unless using the functionality it offers.
-        if any(s in self.format_up or s in self.format_up for s in
+        if any(s in self.format_up or s in self.format_down or s in self.format_up_verbose for s in
                ['essid', 'freq', 'quality', 'quality_bar']):
             get_wifi_info = True
         else:
@@ -307,7 +311,7 @@ class Network(IntervalModule, ColorRangeModule):
                                         get_wifi_info)
 
         # Don't require importing psutil unless using the functionality it offers.
-        if any(s in self.format_up or s in self.format_down for s in
+        if any(s in self.format_up or s in self.format_down or s in self.format_up_verbose for s in
                ['bytes_sent', 'bytes_recv', 'packets_sent', 'packets_recv', 'network_graph']):
             self.network_traffic = NetworkTraffic(self.unknown_up, self.divisor, self.round_size)
         else:
@@ -315,6 +319,8 @@ class Network(IntervalModule, ColorRangeModule):
 
         self.colors = self.get_hex_color_range(self.start_color, self.end_color, int(self.upper_limit))
         self.kbs_arr = [0.0] * self.graph_width
+
+        self.format_up_run = self.format_up
 
     def cycle_interface(self, increment=1):
         interfaces = [i for i in netifaces.interfaces() if i not in self.ignore_interfaces]
@@ -327,6 +333,13 @@ class Network(IntervalModule, ColorRangeModule):
         if self.network_traffic:
             self.network_traffic.clear_counters()
             self.kbs_arr = [0.0] * self.graph_width
+
+    def toggle_verbose(self):
+        self.verbose = not self.verbose
+        if self.verbose:
+            self.format_up_run = self.format_up_verbose
+        else:
+            self.format_up_run = self.format_up
 
     def get_network_graph(self, kbs):
         # Cycle array by inserting at the start and chopping off the last element
@@ -357,7 +370,7 @@ class Network(IntervalModule, ColorRangeModule):
         if sysfs_interface_up(self.interface, self.unknown_up):
             if not color:
                 color = self.color_up
-            format_str = self.format_up
+            format_str = self.format_up_run
         else:
             color = self.color_down
             format_str = self.format_down
